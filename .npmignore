@@ -1,2 +1,7 @@
 node_modules
 example
+.idea
+build
+.gradle
+*.iml
+gradle

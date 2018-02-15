@@ -1,28 +1,28 @@
 package com.vonovak;
 
 import android.app.Activity;
-import android.content.CursorLoader;
 import android.content.Intent;
-import android.database.Cursor;
-import android.os.Bundle;
-import android.provider.CalendarContract;
-import android.app.LoaderManager;
 import android.content.Loader;
+import android.os.Bundle;
 import android.util.Log;
 
-import com.facebook.react.bridge.*;
+import com.facebook.react.bridge.ActivityEventListener;
+import com.facebook.react.bridge.Promise;
+import com.facebook.react.bridge.ReactApplicationContext;
+import com.facebook.react.bridge.ReactContextBaseJavaModule;
+import com.facebook.react.bridge.ReactMethod;
+import com.facebook.react.bridge.ReadableMap;
 
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.TimeZone;
 
-public class AddCalendarEventModule extends ReactContextBaseJavaModule implements ActivityEventListener, LoaderManager.LoaderCallbacks {
+public class AddCalendarEventModule extends ReactContextBaseJavaModule implements ActivityEventListener {
 
     public final String ADD_EVENT_MODULE_NAME = "AddCalendarEvent";
     public final int ADD_EVENT_REQUEST_CODE = 11;
     public static final String DATE_PARSING_FORMAT = "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'";
     private Promise promise;
-    private Long eventPriorId;
 
 
     public AddCalendarEventModule(ReactApplicationContext reactContext) {
@@ -33,7 +33,6 @@ public class AddCalendarEventModule extends ReactContextBaseJavaModule implement
 
     private void resetMembers() {
         promise = null;
-        eventPriorId = 0L;
     }
 
     @Override
@@ -74,84 +73,30 @@ public class AddCalendarEventModule extends ReactContextBaseJavaModule implement
                     && config.getString("description") != null) {
                 calendarIntent.putExtra("description", config.getString("description"));
             }
-            setPriorEventId(getCurrentActivity());
             getReactApplicationContext().startActivityForResult(calendarIntent, ADD_EVENT_REQUEST_CODE, Bundle.EMPTY);
         } catch (ParseException e) {
             promise.reject(ADD_EVENT_MODULE_NAME, e);
         }
     }
 
-    private void setPriorEventId(Activity activity) {
-        if (activity != null) {
-            activity.getLoaderManager().initLoader(1, null, this);
-        }
-    }
 
     @Override
     public void onActivityResult(Activity activity, final int requestCode, final int resultCode, final Intent intent) {
         if (requestCode != ADD_EVENT_REQUEST_CODE || promise == null) {
             return;
         }
-        setPostEventIdAndResolvePromise(activity);
+        resolvePromise();
     }
 
-    private void setPostEventIdAndResolvePromise(Activity activity) {
-        if (activity != null) {
-            activity.getLoaderManager().initLoader(2, null, this);
-        }
-    }
 
-    @Override
-    public Loader onCreateLoader(int id, Bundle args) {
-        return new CursorLoader(getReactApplicationContext(),
-                CalendarContract.Events.CONTENT_URI,
-                new String[]{"MAX(_id) as max_id"}, null, null, "_id");
-    }
-
-    @Override
-    public void onLoadFinished(Loader loader, Object data) {
-        Cursor cursor = (Cursor) data;
-        if (cursor.isClosed()) {
-            // if the destroyLoader function failed
-            Log.d(ADD_EVENT_MODULE_NAME, "warning: cursor was closed; loader probably wasn't destroyed previously");
-            return;
-        }
-        Long lastEventId = extractLastEventId(cursor);
-
-        if (loader.getId() == 1) {
-            this.eventPriorId = lastEventId;
-        } else if (loader.getId() == 2) {
-            resolvePromise(lastEventId);
-        }
-
-        destroyLoader(loader);
-    }
-
-    // inspired by http://stackoverflow.com/questions/9761584/how-can-i-find-out-the-result-of-my-calendar-intent
-    private Long extractLastEventId(Cursor cursor) {
-        Long lastEventId = null;
-
-        if (cursor != null) {
-            cursor.moveToFirst();
-            lastEventId = cursor.getLong(cursor.getColumnIndex("max_id"));
-            cursor.close();
-        }
-        return lastEventId;
-    }
-
-    private void resolvePromise(Long eventPostId) {
+    private void resolvePromise() {
         if (promise == null) {
             Log.e(ADD_EVENT_MODULE_NAME, "promise is null");
             return;
         }
 
-        if (eventPriorId != null && eventPostId != null
-                && eventPostId == eventPriorId + 1) {
-            // react native bridge doesn't support passing longs
-            promise.resolve(eventPostId.doubleValue());
-        } else {
-            promise.resolve(false);
-        }
+
+        promise.resolve(null);
 
         resetMembers();
     }
@@ -164,10 +109,6 @@ public class AddCalendarEventModule extends ReactContextBaseJavaModule implement
         } else {
             Log.d(ADD_EVENT_MODULE_NAME, "warning: activity was null when attempting to destroy the loader");
         }
-    }
-
-    @Override
-    public void onLoaderReset(Loader loader) {
     }
 
     @Override
